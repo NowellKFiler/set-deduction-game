@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Deduction Game – Python Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;                                    
+            background: #0a0a0a;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(ellipse at center, #1a1a1a 0%, #000000 100%);
+        }
+
+        #terminal {
+            width: 90%;
+            max-width: 850px;
+            height: 85vh;
+            background: #0c0c0c;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            box-shadow:
+                0 0 20px rgba(0, 255, 0, 0.15),
+                inset 0 0 10px rgba(0, 255, 0, 0.05);
+            padding: 20px;
+            font-size: 12px;                                           
+            color: #00ff41;
+            line-height: 1.5;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;                                        
+        }
+
+        #terminal::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                rgba(0, 255, 0, 0.03) 0px,
+                rgba(0, 255, 0, 0.03) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        #output {
+            flex: 1;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            padding-right: 5px;
+            position: relative;
+            z-index: 1;
+        }
+
+        #output::-webkit-scrollbar {
+            width: 8px;
+        }
+        #output::-webkit-scrollbar-track {
+            background: #0c0c0c;
+        }
+        #output::-webkit-scrollbar-thumb {
+            background: #1a3a1a;
+            border-radius: 4px;
+        }
+        #output::-webkit-scrollbar-thumb:hover {
+            background: #2a5a2a;
+        }
+
+        #input-line {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+            border-top: 1px solid #1a3a1a;
+            padding-top: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .prompt {
+            color: #00ff41;
+            margin-right: 10px;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        #user-input {
+            background: transparent;
+            border: none;
+            color: #00ff41;
+            font: inherit;
+            outline: none;
+            flex: 1;
+            caret-color: #00ff41;                             
+        }
+
+        #user-input::placeholder {
+            color: #1a5a1a;
+            opacity: 0.7;
+        }
+
+        #user-input:focus::after {
+            content: "";
+        }
+
+        #loading {
+            color: #aaa;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        .terminal-title {
+            position: absolute;
+            top: 8px;
+            left: 20px;
+            font-size: 12px;
+            color: #555;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            z-index: 3;
+            pointer-events: none;
+        }
+        .terminal-buttons {
+            position: absolute;
+            top: 8px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 3;
+            pointer-events: none;
+        }
+        .terminal-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #333;
+        }
+        .terminal-btn.red   { background: #ff5f56; }
+        .terminal-btn.yellow{ background: #ffbd2e; }
+        .terminal-btn.green { background: #27c93f; }
+
+    </style>
+</head>
+<body>
+    <div id="terminal">
+        <div class="terminal-title">set-deduction.py</div>
+        <div class="terminal-buttons">
+            <div class="terminal-btn red"></div>
+            <div class="terminal-btn yellow"></div>
+            <div class="terminal-btn green"></div>
+        </div>
+
+        <div id="output"></div>
+        <div id="input-line" style="display:none;">
+            <span class="prompt">&gt;</span>
+            <input type="text" id="user-input" autofocus placeholder="type here...">
+        </div>
+        <div id="loading">Loading Python interpreter…</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <script>
+        const outputDiv = document.getElementById('output');
+        const inputLine = document.getElementById('input-line');
+        const inputField = document.getElementById('user-input');
+        const loadingDiv = document.getElementById('loading');
+
+        // Promise‑based input that waits for the user to press Enter
+        function waitForInput() {
+            return new Promise(resolve => {
+                inputLine.style.display = 'flex';
+                inputField.focus();
+                inputField.value = '';
+                function onKey(e) {
+                    if (e.key === 'Enter') {
+                        inputField.removeEventListener('keydown', onKey);
+                        const value = inputField.value;
+                        inputField.value = '';
+                        inputLine.style.display = 'none';
+                        resolve(value);
+                    }
+                }
+                inputField.addEventListener('keydown', onKey);
+            });
+        }
+
+        // Send Python print() output to the terminal div
+        function pyPrint(text) {
+            outputDiv.innerHTML += text + '\n';
+            // auto‑scroll to bottom
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        async function main() {
+            const pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/" });
+            loadingDiv.style.display = 'none';
+
+            // Expose async_input to Python
+            pyodide.globals.set("async_input", async (prompt) => {
+                pyPrint(prompt);
+                const response = await waitForInput();
+                pyPrint(response);
+                return response;
+            });
+
+            // Set a flag so Python knows it's running in Pyodide
+            pyodide.globals.set("IN_PYODIDE", true);
+
+            // Make a JS function available to clear the terminal
+            pyodide.globals.set("clear_output", () => {
+                outputDiv.innerHTML = '';
+            });
+
+            // Capture stdout/stderr
+            pyodide.setStdout({ batched: (text) => { pyPrint(text); } });
+            pyodide.setStderr({ batched: (text) => { pyPrint(text); } });
+
+            // Load game.py
+            try {
+                const response = await fetch('game.py');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const pythonCode = await response.text();
+                await pyodide.runPythonAsync(pythonCode);
+
+                // Manually start the game
+                await pyodide.runPythonAsync('await play_game()');
+            } catch (err) {
+                pyPrint(`Error: ${err.message}`);
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>

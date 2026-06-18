@@ -85,9 +85,10 @@ guess
 
 ```
 .
-├── index.html    # Web terminal interface and Pyodide bootstrap
-├── game.py       # Game logic (shared by web and local execution)
-└── README.md     # This documentation
+├── index.html
+├── game.py
+├── LICENSE
+└── README.md
 ```
 
 ## Technology
